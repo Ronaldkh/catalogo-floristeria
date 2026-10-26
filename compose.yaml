@@ -1,0 +1,63 @@
+name: floristeria-catalogo
+
+services:
+  app:
+    build: .
+    image: floristeria-catalogo:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp_service_account
+    ports:
+      - "${APP_PORT:-8080}:3000"
+    secrets:
+      - gcp_service_account
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1:3000/api/health >/dev/null 2>&1 || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- Cloudflare Tunnel (cuando publiques el catálogo) ---
+  # 1. Crea el túnel en Cloudflare Zero Trust > Networks > Tunnels.
+  # 2. En el túnel, public hostname -> http://app:3000
+  # 3. Agrega CLOUDFLARE_TUNNEL_TOKEN=... a .env y descomenta este servicio.
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   depends_on:
+  #     app:
+  #       condition: service_healthy
+  #   security_opt:
+  #     - no-new-privileges:true
+  #   cap_drop:
+  #     - ALL
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+
+secrets:
+  gcp_service_account:
+    file: ./secrets/gcp-service-account.json

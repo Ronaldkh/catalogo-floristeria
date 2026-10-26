@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Catálogo de arreglos florales, ramos, plantas y cajas de flores de Mamá de Valery. Pide por WhatsApp.">
+  <title>Mamá de Valery - Floristería Artesanal</title>
+
+  <!-- Tipografías de Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Estilos CSS -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Encabezado / Branding -->
+  <header class="header">
+    <div class="brand">
+      <h1 class="brand-title">Mamá de Valery</h1>
+      <span class="brand-subtitle">Floristería Artesanal</span>
+    </div>
+  </header>
+
+  <!-- Banner / Buscador -->
+  <section class="hero">
+    <div class="search-box">
+      <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input type="text" id="searchInput" placeholder="Buscar rosas, orquídeas, ramos..." aria-label="Buscar en el catálogo">
+    </div>
+  </section>
+
+  <!-- Barra de Filtros por Categoría (Scroll Horizontal en Móvil) -->
+  <nav class="categories-bar">
+    <button class="chip active" data-category="todos">Todos</button>
+    <button class="chip" data-category="Ramos">Ramos</button>
+    <button class="chip" data-category="Arreglos">Arreglos</button>
+    <button class="chip" data-category="Plantas">Plantas</button>
+    <button class="chip" data-category="Cajas">Cajas de Flores</button>
+    <button class="chip" data-category="Condolencias">Condolencias</button>
+  </nav>
+
+  <!-- Estado de Carga e Info -->
+  <div id="statusNotice" class="status-notice" style="display: none;" role="status"></div>
+
+  <!-- Contenedor Principal del Catálogo -->
+  <main class="container">
+    <div id="productsGrid" class="products-grid">
+      <!-- Las tarjetas de productos se renderizan dinámicamente -->
+    </div>
+  </main>
+
+  <!-- Pie de página -->
+  <footer class="footer">
+    <p><strong>Mamá de Valery</strong> · Floristería Artesanal</p>
+    <p class="footer-sub">Catálogo conectado en vivo con Google Sheets</p>
+  </footer>
+
+  <!-- Lógica JavaScript -->
+  <script>
+    // Configuración del backend (misma origen, sin CORS)
+    const API_URL = '/api/catalogo';
+    const REFRESH_INTERVAL_MS = 60000;
+    const TELEFONO_WHATSAPP = '573000000000'; // Reemplaza con tu número de WhatsApp
+
+    // Datos de respaldo (mock) en caso de que el backend aún no esté conectado
+    const MOCK_PRODUCTS = [
+      {
+        id: "1",
+        nombre: "Ramo Primavera Silvestre",
+        categoria: "Ramos",
+        precio: "85.000",
+        descripcion: "Mezcla artesanal de girasoles, margaritas y eucalipto fresco en envoltorio ecológico.",
+        imagen: "https://images.unsplash.com/photo-1561181286-d3fee7d55364?auto=format&fit=crop&w=600&q=80",
+        disponible: "si"
+      },
+      {
+        id: "2",
+        nombre: "Caja Elegancia en Rosas",
+        categoria: "Cajas",
+        precio: "120.000",
+        descripcion: "12 rosas rojas seleccionadas a mano en caja cilindrica de lujo con lazo de satén.",
+        imagen: "https://images.unsplash.com/photo-1526047932273-341f2a7631f9?auto=format&fit=crop&w=600&q=80",
+        disponible: "si"
+      },
+      {
+        id: "3",
+        nombre: "Orquídea Phalaenopsis Blanca",
+        categoria: "Plantas",
+        precio: "95.000",
+        descripcion: "Planta de orquídea natural de dos varas en maceta cerámica artesanal.",
+        imagen: "https://images.unsplash.com/photo-1525310072745-f49212b5ac6d?auto=format&fit=crop&w=600&q=80",
+        disponible: "si"
+      },
+      {
+        id: "4",
+        nombre: "Arreglo Botánico Pastel",
+        categoria: "Arreglos",
+        precio: "110.000",
+        descripcion: "Composición florística con hortensias, rosas pastel y follajes finos en base de cristal.",
+        imagen: "https://images.unsplash.com/photo-1582794543139-8ac9cb0f7b11?auto=format&fit=crop&w=600&q=80",
+        disponible: "si"
+      }
+    ];
+
+    let allProducts = [];
+    let currentCategory = 'todos';
+    let currentSearch = '';
+    let lastUpdatedAt = null;
+    let refreshTimer = null;
+
+    // Inicializar aplicación
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchProducts({ initial: true });
+      setupEventListeners();
+      refreshTimer = setInterval(() => fetchProducts(), REFRESH_INTERVAL_MS);
+    });
+
+    // Consumir API del backend o usar Fallback
+    async function fetchProducts({ initial = false } = {}) {
+      const notice = document.getElementById('statusNotice');
+
+      try {
+        const response = await fetch(API_URL, { cache: 'no-cache' });
+        if (!response.ok) throw new Error(`Servidor respondió ${response.status}`);
+
+        const json = await response.json();
+        const nextProducts = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        const nextUpdatedAt = json.updatedAt || null;
+        const changed = initial || nextUpdatedAt !== lastUpdatedAt || nextProducts.length !== allProducts.length;
+
+        allProducts = nextProducts;
+        lastUpdatedAt = nextUpdatedAt;
+
+        if (json.stale) {
+          showNotice('Mostrando la última versión disponible mientras se reconecta con Google Sheets.');
+        } else {
+          hideNotice();
+        }
+
+        if (changed) renderProducts();
+      } catch (error) {
+        console.warn('No se pudo conectar con el backend:', error.message);
+
+        if (allProducts.length === 0) {
+          allProducts = MOCK_PRODUCTS;
+          renderProducts();
+        }
+
+        showNotice('Modo de prueba local: el backend o Google Sheets no está disponible.');
+      }
+    }
+
+    function showNotice(message) {
+      const notice = document.getElementById('statusNotice');
+      notice.textContent = message;
+      notice.style.display = 'block';
+    }
+
+    function hideNotice() {
+      const notice = document.getElementById('statusNotice');
+      notice.style.display = 'none';
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[char]);
+    }
+
+    // Renderizar tarjetas de productos
+    function renderProducts() {
+      const grid = document.getElementById('productsGrid');
+      grid.innerHTML = '';
+
+      const filtered = allProducts.filter(item => {
+        const isDisponible = item.disponible ? item.disponible.toLowerCase() === 'si' : true;
+        const matchesCategory = currentCategory === 'todos' || (item.categoria && item.categoria.toLowerCase() === currentCategory.toLowerCase());
+        const matchesSearch = (item.nombre || '').toLowerCase().includes(currentSearch.toLowerCase()) ||
+                              (item.descripcion || '').toLowerCase().includes(currentSearch.toLowerCase());
+
+        return isDisponible && matchesCategory && matchesSearch;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <p>No encontramos flores o arreglos que coincidan con tu búsqueda.</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(product => {
+        const card = document.createElement('article');
+        card.className = 'card';
+
+        const nombre = escapeHtml(product.nombre);
+        const categoria = escapeHtml(product.categoria || 'Floristería');
+        const descripcion = escapeHtml(product.descripcion || '');
+        const precioTexto = String(product.precio || '').trim();
+        const precio = precioTexto
+          ? (precioTexto.startsWith('$') ? escapeHtml(precioTexto) : `$${escapeHtml(precioTexto)}`)
+          : 'Consultar precio';
+        const imagen = escapeHtml(product.imagen || 'https://via.placeholder.com/400x300?text=Floristeria+Artesanal');
+
+        const precioMensaje = precioTexto ? ` (${precioTexto})` : '';
+        const mensajeWpp = encodeURIComponent(`Hola Mamá de Valery, quisiera encargar el arreglo "${product.nombre}"${precioMensaje}. ¿Tienen disponibilidad?`);
+        const urlWpp = `https://wa.me/${TELEFONO_WHATSAPP}?text=${mensajeWpp}`;
+
+        card.innerHTML = `
+          <div class="card-image-wrapper">
+            <img class="card-image" src="${imagen}" alt="${nombre}" loading="lazy">
+            <span class="card-badge">${categoria}</span>
+          </div>
+          <div class="card-content">
+            <h3 class="card-title">${nombre}</h3>
+            <p class="card-description">${descripcion}</p>
+            <div class="card-footer">
+              <span class="card-price">${precio}</span>
+              <a href="${urlWpp}" target="_blank" rel="noopener noreferrer" class="btn-order">
+                Pedir por WhatsApp
+              </a>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // Escuchadores de eventos para filtros y búsqueda
+    function setupEventListeners() {
+      const searchInput = document.getElementById('searchInput');
+      searchInput.addEventListener('input', (e) => {
+        currentSearch = e.target.value;
+        renderProducts();
+      });
+
+      const chips = document.querySelectorAll('.chip');
+      chips.forEach(chip => {
+        chip.addEventListener('click', () => {
+          chips.forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          currentCategory = chip.dataset.category;
+          renderProducts();
+        });
+      });
+    }
+  </script>
+</body>
+</html>
